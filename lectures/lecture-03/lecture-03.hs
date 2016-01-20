@@ -1,87 +1,135 @@
 {-# LANGUAGE InstanceSigs #-}
 
-import Text.Read (readMaybe)
-import Control.Exception
-
 -- Equational reasoning
 
 -- (.) :: (b -> c) -> (a -> b) -> (a -> c)
--- (f . g) = \x -> f (g x)
+-- (f . g) x = f (g x)
+-- id x = x
 
--- f . id = f
+-- PROVE: f . id = f
+--
+-- (f . id) x = f (id x)    -- substiute (.)
+--            = f x         -- subistute id
+-- (f . id)   = f           -- the same
+-- QED
+
 
 data Option a = None | Some a
     deriving (Show, Eq)
 
 mapOption :: (a -> b) -> Option a -> Option b
-mapOption _ None     = undefined
-mapOption f (Some x) = undefined
+mapOption f None     = None
+mapOption f (Some x) = Some (f x)
 
--- mapOption id = id
+-- PROVE: mapOption id = id
 
--- mapOption f . mapOption g = mapOption (f . g)
+-- mapOption id None = None
+-- id None           = None
+--
+-- mapOption id (Some x) = Some (id x)
+--                       = Some x
+-- id (Some x)           = Some x
+--
+-- QED
+
+-- PROVE: mapOption f . mapOption g = mapOption (f . g)
+--
+-- aka: mapOption f (mapOption g x) = mapOption (f . g) x
+
+-- mapOption f (mapOption g None)
+--   = mapOption f None
+--   = None
+--
+-- mapOption (f . g) None
+--   = None
+--
+-- mapOption f (mapOption g (Some x))
+--   = mapOption f (Some (g x))
+--   = Some (f (g x))
+--
+-- mapOption (f . g) (Some x)
+--   = Some ((f . g) x)
+--   = Some (f (g x))
+--
+-- QED
 
 data List a = Nil | Cons a (List a)
     deriving (Show, Eq)
 
 mapList :: (a -> b) -> List a -> List b
-mapList _ Nil         = undefined
-mapList f (Cons x xs) = undefined
+mapList _ Nil         = Nil
+mapList f (Cons x xs) = Cons (f x) (mapList f xs)
 
--- mapList id = id
-
--- mapList f . mapList g = mapList (f . g)
+-- excercises!
+-- PROVE: mapList id = id
+-- PROVE: mapList f . mapList g = mapList (f . g)
 
 -- | Folds
 
--- Imperative "chomping":
-foldl' :: (b -> a -> b) -> b -> [a] -> [b]
-foldl' = undefined
+-- sum :: [Int] -> Int
+-- length :: [a] -> Int
+-- product :: [Int] -> Int
 
--- Functional "deconstruction":
-foldr' :: (a -> b -> b) -> b -> [a] -> [b]
-foldr' = undefined
+-- Imperative "chomping": (tail recursion, more performant)
+foldl'' :: (b -> a -> b) -> b -> [a] -> b
+foldl'' f initialAcc [] = initialAcc
+foldl'' f acc (x:xs) =
+    let newAcc = f acc x
+    in  foldl'' f newAcc xs     -- continue choming with new accumulator
+
+-- Functional "deconstruction": (more elegant, works with laziness)
+foldr' :: (a -> b -> b) -> b -> [a] -> b
+foldr' f z [] = z                           -- replace [] with z
+foldr' f z (x : xs) = x `f` foldr' f z xs   -- repliace (:) with f
 
 anyTrue :: [Bool] -> Bool
-anyTrue = undefined
-
--- Deconstructing other things
-foldOption :: (a -> b) -> b -> Option a -> b
-foldOption = undefined
-
-instance Foldable List where
-    foldr :: (a -> b -> b) -> b -> List a -> b
-    foldr = undefined
-
-instance Foldable Option where
-    foldr :: (a -> b -> b) -> b -> Option a -> b
-    foldr = undefined
-
--- exercise:
--- toList :: Foldable f => f a -> [a]
+-- anyTrue xs = foldl (||) False xs     -- doesn't work on infinite lists!
+anyTrue xs = foldr (||) False xs        -- works on infinite lists!
 
 -- | Trees
 
-data Tree a = Leaf a | Branch (Tree a) (Tree a)
+data Tree a = Leaf | Node a (Tree a) (Tree a)
     deriving (Eq, Show)
 
 instance Functor Tree where
     fmap :: (a -> b) -> Tree a -> Tree b
-    fmap = undefined
+    fmap f Leaf = Leaf
+    fmap f (Node x tL tR) =
+         Node (f x) (fmap f tL) (fmap f tR)
 
 -- | Binary search trees
 
-insert :: Ord a => a -> Tree a -> Tree a
-insert = undefined
+insertTree :: Ord a => a -> Tree a -> Tree a
+insertTree x Leaf = Node x Leaf Leaf
+insertTree x (Node y tL tR)
+    | x < y     = Node y (insertTree x tL) tR
+    | otherwise = Node y tL (insertTree x tR)
 
-findInTree :: Ord a => (a -> Bool) -> Tree a -> Option a
-findInTree = undefined
+constructTree :: Ord a => [a] -> Tree a
+constructTree = foldl (\acc newItem -> insertTree newItem acc) Leaf
+                   -- ^ update function
+
+isInTree :: Ord a
+         => a -> Tree a -> Bool
+isInTree x Leaf = False
+isInTree x (Node y tL tR)
+    | x == y    = True
+    | x < y     = isInTree x tL
+    | otherwise = isInTree x tR
+
+sumTree :: Num a
+        => Tree a -> a
+sumTree Leaf           = 0
+sumTree (Node x tL tR) = x + sumTree tL + sumTree tR
 
 -- exercise:
 -- remove :: Ord a => (a -> Bool) -> Tree a -> Tree a
 
 -- | IO
 
+-- data () = ()
+
+-- descriptions of IO actions
 sayHello :: IO ()
 sayHello = putStrLn "Hello!"
 
@@ -90,6 +138,7 @@ sayHelloTwice = do
     putStrLn "Hello!"
     putStrLn "Hello again!"
 
+-- impossible in C, python, etc!
 doTwice :: IO a -> IO a
 doTwice action = do
     action
@@ -105,162 +154,37 @@ doTwice' :: IO a -> IO (a, a)
 doTwice' action = do
     res1 <- action
     res2 <- action
-    return (res1, res2)
+    return (res1, res2)         -- no-op
 
--- data Maybe a = Nothing | Just a
 
-readLineOption :: Read a => IO (Maybe a)
-readLineOption = undefined
+doForever :: IO a -> IO ()
+doForever action = do
+    action
+    doForever action
+
+while :: IO Bool -> IO ()
+while act = do
+    res <- act
+    case res of
+      True  -> while act
+      False -> return ()
+
+mapIO :: (a -> b) -> IO a -> IO b
+mapIO f action = do
+    res <- action
+    return (f res)
+
+untilShortString :: IO ()
+untilShortString = while (mapIO (< 10) getLength)
 
 -- instance Functor IO where
 --     fmap :: (a -> b) -> IO a -> IO b
+--     fmap f action = do
+--       res <- action
+--       return (f res)
 
-game :: Int -> IO ()
-game = undefined
-
--- keep track of number of guesses
-game' :: Int -> IO Int
-game' = undefined
-
-doForever :: IO a -> IO ()
-doForever = undefined
-
-while :: IO Bool -> IO ()
-while = undefined
-
-doAll_ :: [IO a] -> IO ()
-doAll_ = undefined
-
-doAll :: [IO a] -> IO [a]
-doAll = undefined
-
-doAllParallel_ :: [IO a] -> IO ()
-doAllParallel_ = undefined
 
 doWhen :: Bool -> IO () -> IO ()
-doWhen = undefined
-
--- | Exceptions
-
-readFileMaybe :: FilePath -> IO (Maybe String)
-readFileMaybe = undefined
-
--- | Building DSL's
-
-data Action = Put String
-            | Add Int
-            | Set Int
-            | Display
-            | ReadIn
-  deriving (Show, Eq)
-
-execAction :: Action -> Int -> IO Int
-execAction = undefined
-
-execProgram :: [Action] -> Int -> IO Int
-execProgram = undefined
-
--- | Typeclasses and Laws
-
--- class Eq a where
---     (==) :: a -> a -> Bool
---     (/=) :: a -> a -> Bool
-
--- class Ord a where
---     (<) :: a -> a -> Bool
---     (>) :: a -> a -> Bool
---     (>=) :: a -> a -> Bool
---     (<=) :: a -> a -> Bool
-
--- class Functor f where
---     fmap :: (a -> b) -> f a -> f b
-
--- class Monoid m where
---     mempty  :: m
---     mappend :: m -> m -> m
-
-instance Monoid (List a) where
-    mempty = undefined
-    mappend = undefined
-
-instance Monoid a => Monoid (Option a) where
-    mempty = undefined
-    mappend = undefined
-
-instance Monoid Int where
-    mempty = undefined
-    mappend = undefined
-
-newtype Summer a = Summer a
-    deriving (Show, Eq)
-
-newtype Multer a = Multer a
-    deriving (Show, Eq)
-
-instance Num a => Monoid (Summer a) where
-    mempty = undefined
-    mappend = undefined
-
-instance Num a => Monoid (Multer a) where
-    mempty = undefined
-    mappend = undefined
-
-instance Monoid a => Monoid (r -> a) where
-    mempty = undefined
-    mappend = undefined
-
--- | Tour of types and typeclasses
-
--- | Either
-
-data Either' a b = Left' a | Right' b
-    deriving (Show, Eq)
-
-instance Functor (Either' e) where
-    fmap :: (a -> b) -> Either' e a -> Either' e b
-    fmap = undefined
-
--- | Writer
-
-data Writer w a = Writer w a
-    deriving (Show, Eq)
-
-instance Functor (Writer w) where
-    fmap :: (a -> b) -> Writer w a -> Writer w b
-    fmap = undefined
-
--- | Reader
-
-data Reader r a = Reader { runReader :: r -> a }
-    deriving (Show, Eq)
-
--- | Applicative
-
-overOptions :: (a -> b -> c) -> Option a -> Option b -> Option c
-overOptions = undefined
-
-overEithers :: (a -> b -> c) -> Either' e a -> Either' e b -> Either' e c
-overEithers = undefined
-
-overReaders :: (a -> b -> c) -> Reader r a -> Reader r b -> Reader r c
-overReaders = undefined
-
-overWriters :: Monoid w => (a -> b -> c) -> Writer w a -> Writer w b -> Writer w c
-overWriters = undefined
-
-overIOs :: (a -> b -> c) -> IO a -> IO b -> IO c
-overIOs = undefined
-
-instance Applicative Option where
-    pure :: a -> Option a
-    pure = undefined
-    (<*>) :: Option (a -> b) -> Option a -> Option b
-    (<*>) = undefined
-
-instance Applicative (Either' e) where
-    pure :: a -> Either' e a
-    pure = undefined
-    (<*>) :: Either' e (a -> b) -> Either' e a -> Either' e b
-    (<*>) = undefined
-
+doWhen True  action = action        -- answer is original action
+doWhen False action = return ()     -- answer is no-op
 
