@@ -246,38 +246,6 @@ foo = do
     y <- logSquare x        -- y = 400
     L ["i'm done"] (x + y)  -- res = 420
 
-data WithStack a = WS ([Int] -> (a, [Int]))
-                      -- ^ takes a stack
-                      --        ^ result with new stack
-
-pushStack :: Int -> WithStack ()
-pushStack x = WS (\stck -> ((), x:stck))
-
-popStack :: WithStack Int
-popStack = WS (\(x:xs) -> (x, xs))
-
-runWithStack :: WithStack a -> [Int] -> (a, [Int])
-runWithStack (WS f) stck0 = f stck0
-
--- instance Functor WithStack where
---     fmap :: (a -> b) -> WithStack a -> WithStack b
---     fmap = liftM
-
--- instance Applicative WithStack where
---     pure :: a -> WithStack a
---     pure = return
---     (<*>) :: WithStack (a -> b) -> WithStack a -> WithStack b
---     (<*>) = ap
-
--- instance Monad WithStack where
---     return :: a -> WithStack a
---     return x = WS (\s -> (x, s))
---     (>>=) :: WithStack a -> (a -> WithStack b) -> WithStack b
---     WS g >>= f = WS (\s -> let (x, s') = g s
---                                WS
---                            in  f s'
---                     )
-
 -- Traversable
 
 -- sequence :: [IO a] -> IO [a]
